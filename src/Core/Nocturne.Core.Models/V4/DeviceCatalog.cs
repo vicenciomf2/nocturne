@@ -8,15 +8,15 @@ public static class DeviceCatalog
     private static readonly IReadOnlyList<DeviceCatalogEntry> _entries =
     [
         // CGMs — Dexcom
-        new() { Id = "dexcom-g7",       Name = "Dexcom G7",       Manufacturer = "Dexcom",    Category = DeviceCategory.CGM, Cgm = new() { SensorDurationDays = 10, WarmupMinutes = 30,  UpdateIntervalMinutes = 5, HasSeparateTransmitter = false } },
-        new() { Id = "dexcom-g6",       Name = "Dexcom G6",       Manufacturer = "Dexcom",    Category = DeviceCategory.CGM, Cgm = new() { SensorDurationDays = 10, WarmupMinutes = 120, UpdateIntervalMinutes = 5, HasSeparateTransmitter = true, TransmitterDurationDays = 90 } },
-        new() { Id = "dexcom-one-plus", Name = "Dexcom ONE+",     Manufacturer = "Dexcom",    Category = DeviceCategory.CGM, Cgm = new() { SensorDurationDays = 10, WarmupMinutes = 30,  UpdateIntervalMinutes = 5, HasSeparateTransmitter = false } },
-        new() { Id = "dexcom-one",      Name = "Dexcom ONE",      Manufacturer = "Dexcom",    Category = DeviceCategory.CGM, Cgm = new() { SensorDurationDays = 10, WarmupMinutes = 120, UpdateIntervalMinutes = 5, HasSeparateTransmitter = true, TransmitterDurationDays = 90 } },
+        new() { Id = "dexcom-g7",       Name = "Dexcom G7",       Manufacturer = "Dexcom",    Category = DeviceCategory.CGM, Cgm = new() { SensorDurationDays = 10, WarmupMinutes = 30,  UpdateIntervalMinutes = 5, HasSeparateTransmitter = false, ReportingMinMgdl = 40, ReportingMaxMgdl = 400 } },
+        new() { Id = "dexcom-g6",       Name = "Dexcom G6",       Manufacturer = "Dexcom",    Category = DeviceCategory.CGM, Cgm = new() { SensorDurationDays = 10, WarmupMinutes = 120, UpdateIntervalMinutes = 5, HasSeparateTransmitter = true, TransmitterDurationDays = 90, ReportingMinMgdl = 40, ReportingMaxMgdl = 400 } },
+        new() { Id = "dexcom-one-plus", Name = "Dexcom ONE+",     Manufacturer = "Dexcom",    Category = DeviceCategory.CGM, Cgm = new() { SensorDurationDays = 10, WarmupMinutes = 30,  UpdateIntervalMinutes = 5, HasSeparateTransmitter = false, ReportingMinMgdl = 40, ReportingMaxMgdl = 400 } },
+        new() { Id = "dexcom-one",      Name = "Dexcom ONE",      Manufacturer = "Dexcom",    Category = DeviceCategory.CGM, Cgm = new() { SensorDurationDays = 10, WarmupMinutes = 120, UpdateIntervalMinutes = 5, HasSeparateTransmitter = true, TransmitterDurationDays = 90, ReportingMinMgdl = 40, ReportingMaxMgdl = 400 } },
 
         // CGMs — Abbott
-        new() { Id = "libre-3",         Name = "FreeStyle Libre 3",  Manufacturer = "Abbott", Category = DeviceCategory.CGM, Cgm = new() { SensorDurationDays = 14, WarmupMinutes = 60, UpdateIntervalMinutes = 1, HasSeparateTransmitter = false } },
-        new() { Id = "libre-2-plus",    Name = "FreeStyle Libre 2+", Manufacturer = "Abbott", Category = DeviceCategory.CGM, Cgm = new() { SensorDurationDays = 15, WarmupMinutes = 60, UpdateIntervalMinutes = 1, HasSeparateTransmitter = false } },
-        new() { Id = "libre-2",         Name = "FreeStyle Libre 2",  Manufacturer = "Abbott", Category = DeviceCategory.CGM, Cgm = new() { SensorDurationDays = 14, WarmupMinutes = 60, UpdateIntervalMinutes = 1, HasSeparateTransmitter = false } },
+        new() { Id = "libre-3",         Name = "FreeStyle Libre 3",  Manufacturer = "Abbott", Category = DeviceCategory.CGM, Cgm = new() { SensorDurationDays = 14, WarmupMinutes = 60, UpdateIntervalMinutes = 1, HasSeparateTransmitter = false, ReportingMinMgdl = 40, ReportingMaxMgdl = 500 } },
+        new() { Id = "libre-2-plus",    Name = "FreeStyle Libre 2+", Manufacturer = "Abbott", Category = DeviceCategory.CGM, Cgm = new() { SensorDurationDays = 15, WarmupMinutes = 60, UpdateIntervalMinutes = 1, HasSeparateTransmitter = false, ReportingMinMgdl = 40, ReportingMaxMgdl = 500 } },
+        new() { Id = "libre-2",         Name = "FreeStyle Libre 2",  Manufacturer = "Abbott", Category = DeviceCategory.CGM, Cgm = new() { SensorDurationDays = 14, WarmupMinutes = 60, UpdateIntervalMinutes = 1, HasSeparateTransmitter = false, ReportingMinMgdl = 40, ReportingMaxMgdl = 500 } },
 
         // CGMs — Medtronic
         new() { Id = "medtronic-guardian-4", Name = "Guardian 4", Manufacturer = "Medtronic", Category = DeviceCategory.CGM, Cgm = new() { SensorDurationDays = 7, WarmupMinutes = 120, UpdateIntervalMinutes = 5, HasSeparateTransmitter = false } },
