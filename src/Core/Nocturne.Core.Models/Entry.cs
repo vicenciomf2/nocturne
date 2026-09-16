@@ -230,6 +230,7 @@ public class Entry : ProcessableDocumentBase
     /// Gets or sets any additional notes or comments
     /// </summary>
     [JsonPropertyName("notes")]
+    [Sanitizable]
     public string? Notes { get; set; }
 
     /// <summary>

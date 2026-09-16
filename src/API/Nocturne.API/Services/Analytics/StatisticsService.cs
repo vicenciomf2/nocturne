@@ -2874,6 +2874,28 @@ public class StatisticsService : IStatisticsService
     /// </summary>
     private const double GapCadences = 3;
 
+    /// <summary>
+    /// The noisiest a reading can report itself, on the scale
+    /// <see cref="SensorGlucose.Noise"/> carries.
+    /// </summary>
+    private const double MaxReportedNoise = 4;
+
+    /// <summary>
+    /// The series' reported noise on the 0-1 scale <see cref="DataQuality.NoiseLevel"/> is read on.
+    /// A reading that reports nothing is unknown rather than clean, so it is left out instead of
+    /// averaged in as a zero — otherwise the figure would track how many uploaders populate the
+    /// field rather than how noisy the signal was.
+    /// </summary>
+    private static double MeanNoiseLevel(IEnumerable<SensorGlucose> entries)
+    {
+        var reported = entries
+            .Where(entry => entry.Noise.HasValue)
+            .Select(entry => (double)entry.Noise!.Value)
+            .ToList();
+
+        return reported.Count == 0 ? 0 : reported.Average() / MaxReportedNoise;
+    }
+
     private DataQuality AssessDataQuality(
         IList<SensorGlucose> entries,
         DateTime? reportStart = null,
@@ -2934,7 +2956,11 @@ public class StatisticsService : IStatisticsService
                 LongestGap = longestGap,
                 AverageGap = averageGap,
             },
-            NoiseLevel = 0,
+            NoiseLevel = MeanNoiseLevel(entries),
+            // Not derivable from a glucose series: calibrations are their own record type and a
+            // warmup is bounded by a sensor session this method is not given. Left at zero, which
+            // reads as "none occurred" — anything depending on them has to thread that data in
+            // first.
             CalibrationEvents = 0,
             SensorWarmups = 0,
         };
