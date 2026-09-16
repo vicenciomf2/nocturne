@@ -96,6 +96,29 @@ public class LibreLinkAuthTokenProvider(
 
                 if (loginResponse?.Data?.AuthTicket?.Token != null) return (loginResponse.Data.AuthTicket.Token, false);
 
+                // LibreLinkUp answers three quite different situations with a 200 and no auth
+                // ticket. Reported as one "invalid response" they are indistinguishable from a
+                // wrong password, and the two that a user can fix themselves stay unfixed.
+                if (loginResponse?.Data is { Redirect: true, Region.Length: > 0 } redirected)
+                {
+                    _logger.LogError(
+                        "LibreLinkUp account is served by the {Region} region, not {Configured}. "
+                        + "Set the connector's Region to {Region} and sync again.",
+                        redirected.Region!.ToUpperInvariant(), config.Region,
+                        redirected.Region.ToUpperInvariant());
+                    return (null, false);
+                }
+
+                if (loginResponse?.Data?.Step?.Type is { Length: > 0 } step)
+                {
+                    _logger.LogError(
+                        "LibreLinkUp is waiting on the account to complete '{Step}'. Open the "
+                        + "LibreLinkUp app, finish the prompt it shows, then sync again — it "
+                        + "cannot be completed from here.",
+                        step);
+                    return (null, false);
+                }
+
                 _logger.LogError("LibreLinkUp authentication failed: Invalid response structure");
                 return (null, false);
             },
@@ -156,6 +179,32 @@ public class LibreLinkAuthTokenProvider(
     private class LibreLoginData
     {
         public LibreAuthTicket? AuthTicket { get; set; }
+
+        /// <summary>
+        ///     Set when the account lives on another regional endpoint. The response is a 200 with
+        ///     no auth ticket, which is why it has to be told apart explicitly.
+        /// </summary>
+        public bool Redirect { get; set; }
+
+        /// <summary>
+        ///     The region to re-issue against when <see cref="Redirect"/> is set, lowercased
+        ///     (e.g. "de").
+        /// </summary>
+        public string? Region { get; set; }
+
+        /// <summary>
+        ///     Set when the account owes a consent or verification step before it can be used.
+        /// </summary>
+        public LibreLoginStep? Step { get; set; }
+    }
+
+    /// <summary>
+    ///     A step the account owes: "tou" and "pp" are the terms and privacy consents, accepted in
+    ///     the LibreLinkUp app; "verifyEmail" is an emailed code. None can be completed from here.
+    /// </summary>
+    private class LibreLoginStep
+    {
+        public string? Type { get; set; }
     }
 
     private class LibreAuthTicket

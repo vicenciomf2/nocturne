@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
@@ -41,8 +42,21 @@ internal static class LibreTestHarness
 
     internal static string ConnectionsEmpty() => """{"data":[]}""";
 
+    /// <summary>A login answered with a region redirect instead of an auth ticket.</summary>
+    internal static string LoginRedirect(string region) =>
+        "{\"data\":{\"redirect\":true,\"region\":\"" + region + "\"}}";
+
+    /// <summary>A login answered with a consent or verification step the account owes.</summary>
+    internal static string LoginStep(string step) =>
+        "{\"status\":4,\"data\":{\"step\":{\"type\":\"" + step + "\"}}}";
+
     internal static (LibreConnectorService Service, ScriptedHandler Handler) Build(
-        Func<HttpRequestMessage, (HttpStatusCode Status, string Body)> respond)
+        Func<HttpRequestMessage, (HttpStatusCode Status, string Body)> respond) =>
+        Build(respond, new RecordingLoggerProvider());
+
+    internal static (LibreConnectorService Service, ScriptedHandler Handler) Build(
+        Func<HttpRequestMessage, (HttpStatusCode Status, string Body)> respond,
+        RecordingLoggerProvider logs)
     {
         var handler = new ScriptedHandler(respond);
         var resolver = new ConnectorServerResolver<LibreLinkUpConnectorConfiguration>(
@@ -55,7 +69,7 @@ internal static class LibreTestHarness
             new InMemoryTokenCache(),
             resolver,
             new FixedTenantAccessor(),
-            NullLogger<LibreLinkAuthTokenProvider>.Instance,
+            logs.For<LibreLinkAuthTokenProvider>(),
             new NoDelay());
 
         var service = new LibreConnectorService(
@@ -96,6 +110,28 @@ internal static class LibreTestHarness
             {
                 Content = new StringContent(body, Encoding.UTF8, "application/json"),
             });
+        }
+    }
+
+    /// <summary>
+    /// Keeps what was logged, so a test can assert on the diagnosis a failure produced rather than
+    /// only on the fact that it failed.
+    /// </summary>
+    internal sealed class RecordingLoggerProvider
+    {
+        internal List<string> Messages { get; } = [];
+
+        internal ILogger<T> For<T>() => new Recording<T>(Messages);
+
+        private sealed class Recording<T>(List<string> messages) : ILogger<T>
+        {
+            public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+            public bool IsEnabled(LogLevel logLevel) => true;
+
+            public void Log<TState>(
+                LogLevel logLevel, EventId eventId, TState state, Exception? exception,
+                Func<TState, Exception?, string> formatter) =>
+                messages.Add(formatter(state, exception));
         }
     }
 

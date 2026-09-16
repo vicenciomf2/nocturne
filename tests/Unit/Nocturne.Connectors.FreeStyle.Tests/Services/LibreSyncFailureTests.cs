@@ -20,6 +20,47 @@ public class LibreSyncFailureTests
         DataTypes = [SyncDataType.Glucose],
     };
 
+    /// <summary>
+    /// A LibreLinkUp account served by another region answers login with a 200 carrying no auth
+    /// ticket. Reported as a generic invalid response it is indistinguishable from a wrong
+    /// password, and picking the wrong region is the most common way to misconfigure this
+    /// connector — so the failure has to name the region the account is actually on.
+    /// </summary>
+    [Fact]
+    public async Task Sync_WhenTheAccountIsInAnotherRegion_SaysWhichOne()
+    {
+        var logs = new LibreTestHarness.RecordingLoggerProvider();
+        var (service, _) = LibreTestHarness.Build(
+            _ => (HttpStatusCode.OK, LibreTestHarness.LoginRedirect("de")), logs);
+
+        var result = await service.SyncDataAsync(
+            GlucoseRequest, LibreTestHarness.Config(), CancellationToken.None);
+
+        result.Success.Should().BeFalse();
+        logs.Messages.Should().Contain(message => message.Contains("DE"));
+    }
+
+    /// <summary>
+    /// Consent and email verification cannot be completed from here, so the only useful outcome is
+    /// telling the user which prompt to go and finish.
+    /// </summary>
+    [Theory]
+    [InlineData("tou")]
+    [InlineData("pp")]
+    [InlineData("verifyEmail")]
+    public async Task Sync_WhenTheAccountOwesAStep_SaysWhichStep(string step)
+    {
+        var logs = new LibreTestHarness.RecordingLoggerProvider();
+        var (service, _) = LibreTestHarness.Build(
+            _ => (HttpStatusCode.OK, LibreTestHarness.LoginStep(step)), logs);
+
+        var result = await service.SyncDataAsync(
+            GlucoseRequest, LibreTestHarness.Config(), CancellationToken.None);
+
+        result.Success.Should().BeFalse();
+        logs.Messages.Should().Contain(message => message.Contains(step));
+    }
+
     [Fact]
     public async Task Sync_WhenLoginIsRejected_ReportsFailure()
     {
