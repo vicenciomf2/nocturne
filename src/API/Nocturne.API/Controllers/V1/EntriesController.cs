@@ -911,9 +911,13 @@ public class EntriesController : ControllerBase
         // Ensure the ID in the data matches the URL parameter
         entryData.Id = id;
 
+        // Same preprocessing the POST on this resource runs: an update that skipped it could write
+        // markup and an unnormalized timestamp that a create of the same content could not.
+        var processedEntry = _documentProcessingService.ProcessEntry(entryData);
+
         var updatedEntry = await _entryService.UpdateEntryAsync(
             id,
-            entryData,
+            processedEntry,
             cancellationToken
         );
 

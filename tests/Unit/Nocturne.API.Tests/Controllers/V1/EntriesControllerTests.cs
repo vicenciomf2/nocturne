@@ -31,6 +31,12 @@ public class EntriesControllerTests
     {
         _mockEntryService = new Mock<IEntryService>();
         _mockDocumentProcessingService = new Mock<IDocumentProcessingService>();
+
+        // Both write paths on this controller run the entry through the processor, so the double
+        // has to return one. Tests that care what processing did override this.
+        _mockDocumentProcessingService
+            .Setup(processor => processor.ProcessEntry(It.IsAny<Entry>()))
+            .Returns((Entry entry) => entry);
         _mockProcessingStatusService = new Mock<IProcessingStatusService>();
         _mockAlertEvaluator = new Mock<ICanonicalAlertEvaluator>();
         _mockLogger = new Mock<ILogger<EntriesController>>();
