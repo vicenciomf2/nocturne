@@ -27,7 +27,10 @@ public class FreeStyleConnectorInstaller()
             GetServerRegion = config => ((LibreLinkUpConnectorConfiguration)config).Region,
             AdditionalHeaders = new Dictionary<string, string>
             {
-                ["Version"] = "4.16.0",
-                ["Product"] = "llu.android"
+                ["Version"] = LibreLinkUpConstants.ClientVersion(),
+                ["Product"] = LibreLinkUpConstants.AndroidProduct
             },
+            // The platform default would send Nocturne-Connect/1.0 alongside Product: llu.android,
+            // a pairing no real client produces, in front of a Cloudflare edge that scores it.
+            UserAgent = $"LibreLinkUp/{LibreLinkUpConstants.ClientVersion()}",
         });
