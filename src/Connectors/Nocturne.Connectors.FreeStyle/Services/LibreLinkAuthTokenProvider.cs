@@ -35,7 +35,13 @@ public class LibreLinkAuthTokenProvider(
     /// </summary>
     protected override int TokenLifetimeBufferMinutes => 60;
 
-    protected override string ConnectorName => "FreeStyle";
+    /// <summary>
+    ///     The registered connector name, not the vendor family this assembly is named for. The
+    ///     token cache keys on this value and <c>ConnectorConfigurationService.InvalidateCaches</c>
+    ///     passes the registered name, so the two have to agree for a credential change to evict
+    ///     the cached session.
+    /// </summary>
+    protected override string ConnectorName => "LibreLinkUp";
 
     protected override async Task<(string? Token, DateTime ExpiresAt, IReadOnlyDictionary<string, string>? Metadata)> AcquireTokenAsync(
         LibreLinkUpConnectorConfiguration config, CancellationToken cancellationToken)
