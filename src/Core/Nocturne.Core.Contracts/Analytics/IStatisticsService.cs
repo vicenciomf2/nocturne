@@ -70,10 +70,15 @@ public interface IStatisticsService
     /// Check if there is sufficient data for a valid clinical report
     /// Requires minimum 70% data coverage per international guidelines
     /// </summary>
+    /// <param name="expectedReadingsPerDay">
+    /// Readings a full day of wear should produce. Left null it is derived from the series' own
+    /// median interval, so a device reporting every fifteen minutes is not scored against a
+    /// five-minute assumption.
+    /// </param>
     DataSufficiencyAssessment AssessDataSufficiency(
         IEnumerable<SensorGlucose> entries,
         int days = 14,
-        int expectedReadingsPerDay = 288
+        int? expectedReadingsPerDay = null
     );
 
     /// <summary>

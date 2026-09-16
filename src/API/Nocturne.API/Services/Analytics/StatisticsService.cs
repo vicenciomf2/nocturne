@@ -498,14 +498,23 @@ public class StatisticsService : IStatisticsService
     /// Check if there is sufficient data for a valid clinical report
     /// Per international guidelines, minimum 70% data coverage is required
     /// </summary>
+    /// <param name="expectedReadingsPerDay">
+    /// Readings a full day of wear should produce. Left null it is derived from the series' own
+    /// median interval (<see cref="SeriesCadenceMinutes"/>), because the figure is the denominator
+    /// of the coverage the 70% consensus gate is read off: a device reporting every fifteen minutes
+    /// produces 96 readings on a flawless day, and measuring it against a five-minute assumption
+    /// scores that day at a third. The median is what makes this safe — an outage moves the count
+    /// of readings without moving the interval most of them sit at, so gaps still read as gaps.
+    /// </param>
     public DataSufficiencyAssessment AssessDataSufficiency(
         IEnumerable<SensorGlucose> entries,
         int days = 14,
-        int expectedReadingsPerDay = 288 // 5-minute intervals = 288/day
+        int? expectedReadingsPerDay = null
     )
     {
         var entriesList = entries.ToList();
-        var expectedTotal = days * expectedReadingsPerDay;
+        var perDay = expectedReadingsPerDay ?? ExpectedReadingsPerDay(entriesList);
+        var expectedTotal = days * perDay;
 
         if (!entriesList.Any())
         {
@@ -530,7 +539,13 @@ public class StatisticsService : IStatisticsService
 
         var daysWithData = entriesByDate.Count;
         var actualReadings = entriesList.Count;
-        var completeness = expectedTotal > 0 ? (double)actualReadings / expectedTotal * 100 : 0;
+
+        // The consensus gate is "% time CGM active", which is elapsed time covered rather than
+        // readings counted. CalculateCgmActivePercent is that measure; computing a second one here
+        // from a reading count is what scored every non-five-minute device wrong.
+        var periodEnd = entriesList.Max(entry => entry.Timestamp);
+        var completeness = CalculateCgmActivePercent(
+            entriesList, periodEnd.AddDays(-days), periodEnd) ?? 0;
         var avgPerDay = daysWithData > 0 ? (double)actualReadings / daysWithData : 0;
 
         // Calculate longest gap
@@ -1488,6 +1503,18 @@ public class StatisticsService : IStatisticsService
     /// or a device the catalogue carries no <see cref="CgmDeviceWindow.CadenceMinutes"/> for.
     /// </summary>
     private const double DefaultCadenceMinutes = 5;
+
+    /// <summary>
+    /// The readings a full day at this series' own cadence would hold. A series too short to show
+    /// an interval falls back to <see cref="DefaultCadenceMinutes"/>.
+    /// </summary>
+    private static int ExpectedReadingsPerDay(IEnumerable<SensorGlucose> entries)
+    {
+        var sorted = entries.Where(entry => entry.Mills > 0).OrderBy(entry => entry.Mills).ToList();
+        var cadence = SeriesCadenceMinutes(ReadingIntervals(sorted));
+
+        return cadence > 0 ? (int)Math.Round(1440 / cadence) : 0;
+    }
 
     /// <summary>
     /// The minutes from each reading to the next, in series order; empty for a series of one.
