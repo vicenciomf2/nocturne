@@ -44,7 +44,7 @@ public class LibreLinkUpConnectorConfiguration : BaseConnectorConfiguration
     /// <summary>
     ///     LibreLinkUp region
     /// </summary>
-    [ConnectorProperty(ConnectorPropertyKey.Region, DefaultValue = "EU", AllowedValues = ["EU", "US", "AE", "AP", "AU", "CA", "DE", "FR", "JP"])]
+    [ConnectorProperty(ConnectorPropertyKey.Region, DefaultValue = "EU", AllowedValues = ["AE", "AP", "AU", "CA", "DE", "EU", "EU2", "FR", "JP", "US"])]
     public string Region { get; set; } = "EU";
 
     /// <summary>
