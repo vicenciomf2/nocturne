@@ -72,9 +72,10 @@ public class LibreConnectorService(
     public override string ServiceName => "LibreLinkUp";
     protected override string ConnectorSource => DataSources.LibreConnector;
 
-    private async Task<bool> AuthenticateWithConfigAsync(LibreLinkUpConnectorConfiguration config)
+    private async Task<bool> AuthenticateWithConfigAsync(
+        LibreLinkUpConnectorConfiguration config, CancellationToken cancellationToken)
     {
-        var token = await _tokenProvider.GetValidTokenAsync(config);
+        var token = await _tokenProvider.GetValidTokenAsync(config, cancellationToken);
         if (token == null)
         {
             _accountIdHash = string.Empty;
@@ -103,33 +104,49 @@ public class LibreConnectorService(
 
         _bearerToken = token;
 
-        await LoadConnectionsAsync(config);
+        // A token proves the credentials, not that there is a patient to read. Reporting success
+        // without a selected connection is what let a sync fetch nothing and still look healthy.
+        if (!await LoadConnectionsAsync(config, cancellationToken))
+        {
+            TrackFailedRequest("No usable LibreLinkUp connection");
+            return false;
+        }
 
         TrackSuccessfulRequest();
         return true;
     }
 
     /// <summary>
-    ///     Fetches SensorGlucose records from the LibreLinkUp API.
+    ///     Authenticates before the requested-range sync runs, so a rejected credential or an
+    ///     unusable connection ends the run as a failure instead of an empty, successful-looking
+    ///     fetch.
+    /// </summary>
+    protected override Task<bool> EnsureAuthenticatedAsync(
+        LibreLinkUpConnectorConfiguration config, CancellationToken cancellationToken) =>
+        AuthenticateWithConfigAsync(config, cancellationToken);
+
+    /// <summary>
+    ///     Fetches SensorGlucose records from the LibreLinkUp API. Throws
+    ///     <see cref="InvalidOperationException"/> rather than returning an empty list when the
+    ///     connector cannot reach a usable state, so the caller records the run as failed instead
+    ///     of as a sync that found nothing.
     /// </summary>
     private async Task<IEnumerable<SensorGlucose>> FetchSensorGlucoseAsync(
-        LibreLinkUpConnectorConfiguration config, DateTime? since = null)
+        LibreLinkUpConnectorConfiguration config,
+        DateTime? since,
+        CancellationToken cancellationToken)
     {
         if (_tokenProvider.IsTokenExpired || _selectedConnection == null)
         {
             _logger.LogInformation("Token expired or missing connection, attempting to re-authenticate");
-            if (!await AuthenticateWithConfigAsync(config))
-            {
-                _logger.LogError("Failed to authenticate with LibreLinkUp");
-                return [];
-            }
+            if (!await AuthenticateWithConfigAsync(config, cancellationToken))
+                throw new InvalidOperationException("Failed to authenticate with LibreLinkUp");
         }
 
         if (string.IsNullOrWhiteSpace(_selectedConnection?.PatientId))
         {
-            _logger.LogError("Invalid LibreLinkUp patient id");
             TrackFailedRequest("Invalid patient id");
-            return [];
+            throw new InvalidOperationException("No LibreLinkUp patient id to read");
         }
 
         var url = _serverResolver.BuildUrl(config,
@@ -138,13 +155,13 @@ public class LibreConnectorService(
         await _rateLimitingStrategy.ApplyDelayAsync(0);
 
         var result = await ExecuteWithRetryAsync(
-            async () => await FetchSensorGlucoseCoreAsync(url, since),
+            async () => await FetchSensorGlucoseCoreAsync(url, since, cancellationToken),
             _retryDelayStrategy,
             async () =>
             {
                 _tokenProvider.InvalidateToken();
                 _selectedConnection = null;
-                return await AuthenticateWithConfigAsync(config);
+                return await AuthenticateWithConfigAsync(config, cancellationToken);
             },
             maxRetries: config.MaxRetryAttempts,
             operationName: "FetchSensorGlucoseData"
@@ -172,11 +189,12 @@ public class LibreConnectorService(
 
         try
         {
-            var sensorGlucose = await FetchSensorGlucoseAsync(config, request.From);
+            var sensorGlucose = await FetchSensorGlucoseAsync(config, request.From, cancellationToken);
 
             await PublishRecordTypeAsync(result, SyncDataType.Glucose, activeTypes,
                 sensorGlucose.ToList(), PublishSensorGlucoseDataAsync, config, cancellationToken);
         }
+        catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error during LibreLinkUp sync");
@@ -188,52 +206,76 @@ public class LibreConnectorService(
         return result;
     }
 
-    private async Task LoadConnectionsAsync(LibreLinkUpConnectorConfiguration config)
+    /// <summary>
+    ///     Selects the followed patient to read. Returns false when the connector must not proceed:
+    ///     the list could not be fetched, nobody is sharing, or a configured patient id matches
+    ///     none of the connections.
+    /// </summary>
+    private async Task<bool> LoadConnectionsAsync(
+        LibreLinkUpConnectorConfiguration config, CancellationToken cancellationToken)
     {
+        _selectedConnection = null;
+
         try
         {
             var response = await GetWithHeadersAsync(
                 _serverResolver.BuildUrl(config, LibreLinkUpConstants.ApiPaths.Connections),
-                RequestHeaders);
+                RequestHeaders,
+                cancellationToken);
 
             if (!response.IsSuccessStatusCode)
             {
-                _logger.LogWarning("Failed to load LibreLinkUp connections: {StatusCode}", response.StatusCode);
-                return;
+                _logger.LogError("Failed to load LibreLinkUp connections: {StatusCode}", response.StatusCode);
+                return false;
             }
 
             var connectionsResponse = await DeserializeResponseAsync<LibreConnectionsResponse>(response);
 
             if (connectionsResponse?.Data == null || connectionsResponse.Data.Length == 0)
             {
-                _logger.LogWarning("No LibreLinkUp connections found");
-                return;
+                _logger.LogError(
+                    "No LibreLinkUp connections found — nobody is sharing with this account");
+                return false;
             }
 
+            // A configured patient id is a filter, not a hint. Falling back to another connection
+            // would write a different person's glucose into this tenant.
             if (!string.IsNullOrEmpty(config.PatientId))
-                _selectedConnection = connectionsResponse.Data.FirstOrDefault(c =>
-                    c.PatientId == config.PatientId
-                );
-
-            if (_selectedConnection == null)
             {
-                _selectedConnection = connectionsResponse.Data.First();
-                _logger.LogInformation(
-                    "Selected LibreLinkUp connection: {PatientName} ({PatientId})",
-                    _selectedConnection.FirstName + " " + _selectedConnection.LastName,
-                    _selectedConnection.PatientId
-                );
+                _selectedConnection = connectionsResponse.Data.FirstOrDefault(c =>
+                    string.Equals(c.PatientId, config.PatientId, StringComparison.OrdinalIgnoreCase));
+
+                if (_selectedConnection == null)
+                {
+                    _logger.LogError(
+                        "Configured LibreLinkUp patient id matches none of the {Count} shared connections",
+                        connectionsResponse.Data.Length);
+                    return false;
+                }
+
+                return true;
             }
+
+            _selectedConnection = connectionsResponse.Data[0];
+            _logger.LogInformation(
+                "Selected LibreLinkUp connection: {PatientName} ({PatientId})",
+                _selectedConnection.FirstName + " " + _selectedConnection.LastName,
+                _selectedConnection.PatientId
+            );
+            return true;
         }
+        catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error loading LibreLinkUp connections");
+            return false;
         }
     }
 
-    private async Task<List<SensorGlucose>?> FetchSensorGlucoseCoreAsync(string url, DateTime? since)
+    private async Task<List<SensorGlucose>?> FetchSensorGlucoseCoreAsync(
+        string url, DateTime? since, CancellationToken cancellationToken)
     {
-        var response = await GetWithHeadersAsync(url, RequestHeaders);
+        var response = await GetWithHeadersAsync(url, RequestHeaders, cancellationToken);
 
         if (!response.IsSuccessStatusCode)
         {
