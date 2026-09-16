@@ -156,6 +156,10 @@ public class LibreConnectorService(
         var url = _serverResolver.BuildUrl(config,
             string.Format(LibreLinkUpConstants.ApiPaths.GraphData, patientId));
 
+        // No-op as called: ProductionRateLimitingStrategy only delays for a request index above
+        // zero, and this is the sync's single request. Kept because the pacing that matters for
+        // this vendor is the tenant's sync interval, not spacing within one sync — Cloudflare
+        // rate-limits by source IP across the whole deployment.
         await _rateLimitingStrategy.ApplyDelayAsync(0);
 
         var result = await ExecuteWithRetryAsync(

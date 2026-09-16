@@ -71,8 +71,6 @@ public static class LibreLinkUpConstants
     /// </summary>
     public static class Configuration
     {
-        public const string DefaultRegion = "EU";
         public const string DeviceIdentifier = "libre-connector";
-        public const string EntryType = "sgv";
     }
 }
