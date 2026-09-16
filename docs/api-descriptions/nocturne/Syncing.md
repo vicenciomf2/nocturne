@@ -14,6 +14,7 @@ A connection carries several independent streams — glucose, treatments (boluse
 - On a normal background sync each enabled type fetches from `latest_stored_record − 5min` (a small overlap absorbs clock drift).
 - When a type has **no** data yet, it performs an initial backfill over a bounded window (currently 6 months) so a new connection fills in recent history.
 - Profiles and food are small and fetched in full on every sync rather than windowed.
+- LibreLinkUp has no recoverable history at all. Its only data call is the vendor's graph endpoint, which takes no range and returns a fixed rolling window of roughly twelve hours, so the resume point is advisory: an outage longer than that window loses its readings permanently and no manual sync, cursor reset or range request can bring them back. The connector reports `supportsHistoricalSync: false` and advertises no maximum historical depth, because there is none to advertise.
 - Glooko has no per-type resume point, because Glooko itself receives pump data in batches days after the fact. Each scheduled sync re-reads a fixed lookback (`lookbackDays`, default 10), and once a day it walks the full 6-month window so anything that arrived late still lands; a walk that fails is retried after an hour, not on the next cycle. A manual sync (range or no range) and the SSV2 cursor mode are unaffected.
 
 ## Resilient ingestion

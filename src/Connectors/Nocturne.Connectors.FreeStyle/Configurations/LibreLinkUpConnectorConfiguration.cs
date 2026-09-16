@@ -18,7 +18,11 @@ namespace Nocturne.Connectors.FreeStyle.Configurations;
     "Connect to LibreView for CGM data",
     "FreeStyle Libre",
     SupportsHistoricalSync = false,
-    MaxHistoricalDays = 7,
+    // The graph endpoint takes no range and returns the vendor's own rolling window of roughly
+    // twelve hours, and nothing else is fetched — so there is no depth of history to advertise. A
+    // non-zero figure here is only rendered, never honoured, and promised a recovery the connector
+    // cannot perform: an outage longer than that window loses its readings permanently.
+    MaxHistoricalDays = 0,
     SupportsManualSync = true,
     SupportedDataTypes = [SyncDataType.Glucose]
 )]

@@ -23,6 +23,23 @@ public class LibreConfigurationTests
         RegionProperty().AllowedValues.Should().BeEquivalentTo(MappedRegions());
     }
 
+    /// <summary>
+    /// The connector's only data call is the graph endpoint, which takes no range and returns the
+    /// vendor's own rolling window of roughly twelve hours. No sync code reads MaxHistoricalDays —
+    /// it is projected into the capabilities DTO purely for display — so a non-zero value there is
+    /// a promise of recoverable history the connector cannot keep. Zero is falsy in both places the
+    /// UI renders it, leaving the honest "historical sync is not supported" on its own.
+    /// </summary>
+    [Fact]
+    public void NoRecoverableHistoryIsAdvertised()
+    {
+        var registration = typeof(LibreLinkUpConnectorConfiguration)
+            .GetCustomAttribute<ConnectorRegistrationAttribute>()!;
+
+        registration.SupportsHistoricalSync.Should().BeFalse();
+        registration.MaxHistoricalDays.Should().Be(0);
+    }
+
     [Fact]
     public void TheDefaultRegion_IsSelectable()
     {
