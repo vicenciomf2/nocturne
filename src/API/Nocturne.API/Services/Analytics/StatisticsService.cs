@@ -790,7 +790,19 @@ public class StatisticsService : IStatisticsService
 
     private static bool IsPlausibleReading(SensorGlucose entry) => IsPlausibleReading(entry.Mgdl);
 
-    private static bool IsPlausibleReading(double mgdl) => mgdl > 0 && mgdl < 600;
+    /// <summary>
+    /// Whether a stored number is a glucose measurement, and so belongs in metrics defined over
+    /// measurements. A CGM also reports markers through this field — warm-up, device status codes,
+    /// and the value it renders as LOW — and counting those as glucose writes severe hypoglycemia
+    /// into the record that never happened.
+    /// </summary>
+    /// <remarks>
+    /// The upper bound is kept as a backstop for readings whose device is not known here: no CGM in
+    /// this ecosystem names glucose that high, and <see cref="GlucoseReadingClassifier"/> applies no
+    /// ceiling it was not given a device for.
+    /// </remarks>
+    private static bool IsPlausibleReading(double mgdl) =>
+        GlucoseReadingClassifier.IsMeasurement(mgdl) && mgdl < 600;
 
     #endregion
 
