@@ -149,13 +149,17 @@ public class LibreConnectorService(
             throw new InvalidOperationException("No LibreLinkUp patient id to read");
         }
 
+        // Captured before the retry loop: a re-authentication inside it can replace the selected
+        // connection, and the readings of one attempt must not be keyed to another's patient.
+        var patientId = _selectedConnection.PatientId;
+
         var url = _serverResolver.BuildUrl(config,
-            string.Format(LibreLinkUpConstants.ApiPaths.GraphData, _selectedConnection.PatientId));
+            string.Format(LibreLinkUpConstants.ApiPaths.GraphData, patientId));
 
         await _rateLimitingStrategy.ApplyDelayAsync(0);
 
         var result = await ExecuteWithRetryAsync(
-            async () => await FetchSensorGlucoseCoreAsync(url, since, cancellationToken),
+            async () => await FetchSensorGlucoseCoreAsync(url, patientId, since, cancellationToken),
             _retryDelayStrategy,
             async () =>
             {
@@ -273,7 +277,7 @@ public class LibreConnectorService(
     }
 
     private async Task<List<SensorGlucose>?> FetchSensorGlucoseCoreAsync(
-        string url, DateTime? since, CancellationToken cancellationToken)
+        string url, string patientId, DateTime? since, CancellationToken cancellationToken)
     {
         var response = await GetWithHeadersAsync(url, RequestHeaders, cancellationToken);
 
@@ -312,7 +316,7 @@ public class LibreConnectorService(
 
         var glucoseRecords = measurements
             .Where(m => m.ValueInMgPerDl > 0)
-            .Select(_sensorGlucoseMapper.ConvertMeasurement)
+            .Select(m => _sensorGlucoseMapper.ConvertMeasurement(m, patientId))
             .Where(sg => sg != null)
             .Cast<SensorGlucose>()
             .Where(sg => !since.HasValue || DateTimeOffset.FromUnixTimeMilliseconds(sg.Mills).UtcDateTime > since.Value)

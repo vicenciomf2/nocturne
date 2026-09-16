@@ -18,7 +18,13 @@ public class LibreSensorGlucoseMapper(ILogger? logger = null)
         { 5, GlucoseDirection.SingleUp }
     };
 
-    public SensorGlucose? ConvertMeasurement(LibreGlucoseMeasurement measurement)
+    /// <param name="patientId">
+    ///     The followed patient the reading was fetched for. It scopes the sync identifier, so a
+    ///     tenant reconfigured from one followed person to another does not collapse the two onto
+    ///     one key.
+    /// </param>
+    public SensorGlucose? ConvertMeasurement(
+        LibreGlucoseMeasurement measurement, string patientId)
     {
         try
         {
@@ -31,7 +37,14 @@ public class LibreSensorGlucoseMapper(ILogger? logger = null)
             {
                 Id = Guid.CreateVersion7(),
                 Timestamp = timestamp,
+                // LegacyId keys every Libre row already stored, and it was built from the vendor's
+                // formatted string. Changing its shape would make that history unreachable and
+                // re-insert all of it, so it stays as it is and SyncIdentifier carries the stable
+                // key: derived from the parsed instant, it survives a change in that formatting and
+                // is what lets a corrected value replace a stored one instead of being dropped.
                 LegacyId = $"libre_{measurement.FactoryTimestamp}",
+                SyncIdentifier =
+                    $"llu:{patientId}:{new DateTimeOffset(timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds()}",
                 Device = LibreLinkUpConstants.Configuration.DeviceIdentifier,
                 DataSource = DataSources.LibreConnector,
                 Mgdl = mgdl,
