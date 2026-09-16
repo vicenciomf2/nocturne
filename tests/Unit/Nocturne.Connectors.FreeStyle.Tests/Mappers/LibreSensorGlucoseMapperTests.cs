@@ -1,3 +1,4 @@
+using System.Globalization;
 using FluentAssertions;
 using Nocturne.Connectors.FreeStyle.Mappers;
 using Nocturne.Connectors.FreeStyle.Models;
@@ -15,6 +16,20 @@ public class LibreSensorGlucoseMapperTests
 {
     private const string PatientId = "11111111-2222-3333-4444-555555555555";
 
+    /// <summary>
+    /// A recent instant, because the mapper discards readings outside the window the graph endpoint
+    /// can return. Seconds are trimmed so the vendor's formats round-trip exactly.
+    /// </summary>
+    private static readonly DateTime Recent = new DateTime(
+        DateTime.UtcNow.Year, DateTime.UtcNow.Month, DateTime.UtcNow.Day,
+        DateTime.UtcNow.Hour, 30, 0, DateTimeKind.Utc).AddHours(-2);
+
+    private static readonly string UsFormat =
+        Recent.ToString("M/d/yyyy h:mm:ss tt", CultureInfo.InvariantCulture);
+
+    private static readonly string IsoFormat =
+        Recent.ToString("yyyy-MM-dd'T'HH:mm:ss", CultureInfo.InvariantCulture);
+
     private readonly LibreSensorGlucoseMapper _sut = new();
 
     /// <summary>
@@ -26,8 +41,8 @@ public class LibreSensorGlucoseMapperTests
     [Fact]
     public void SyncIdentifier_IsStableAcrossTimestampFormats()
     {
-        var us = _sut.ConvertMeasurement(Measurement("3/14/2026 3:30:00 PM"), PatientId);
-        var iso = _sut.ConvertMeasurement(Measurement("2026-03-14T15:30:00"), PatientId);
+        var us = _sut.ConvertMeasurement(Measurement(UsFormat), PatientId);
+        var iso = _sut.ConvertMeasurement(Measurement(IsoFormat), PatientId);
 
         us!.SyncIdentifier.Should().NotBeNullOrEmpty();
         us.SyncIdentifier.Should().Be(iso!.SyncIdentifier);
@@ -40,8 +55,8 @@ public class LibreSensorGlucoseMapperTests
     [Fact]
     public void SyncIdentifier_DistinguishesPatients()
     {
-        var one = _sut.ConvertMeasurement(Measurement("3/14/2026 3:30:00 PM"), PatientId);
-        var other = _sut.ConvertMeasurement(Measurement("3/14/2026 3:30:00 PM"), "another-patient");
+        var one = _sut.ConvertMeasurement(Measurement(UsFormat), PatientId);
+        var other = _sut.ConvertMeasurement(Measurement(UsFormat), "another-patient");
 
         one!.SyncIdentifier.Should().NotBe(other!.SyncIdentifier);
     }
@@ -54,16 +69,16 @@ public class LibreSensorGlucoseMapperTests
     [Fact]
     public void LegacyId_KeepsItsStoredShape()
     {
-        var reading = _sut.ConvertMeasurement(Measurement("3/14/2026 3:30:00 PM"), PatientId);
+        var reading = _sut.ConvertMeasurement(Measurement(UsFormat), PatientId);
 
-        reading!.LegacyId.Should().Be("libre_3/14/2026 3:30:00 PM");
+        reading!.LegacyId.Should().Be($"libre_{UsFormat}");
     }
 
     [Fact]
     public void DataSource_IsSetSoTheUpsertKeyIsComplete()
     {
         // The (data_source, sync_identifier) index is the upsert key; a null source skips it.
-        var reading = _sut.ConvertMeasurement(Measurement("3/14/2026 3:30:00 PM"), PatientId);
+        var reading = _sut.ConvertMeasurement(Measurement(UsFormat), PatientId);
 
         reading!.DataSource.Should().Be(DataSources.LibreConnector);
     }
@@ -77,9 +92,22 @@ public class LibreSensorGlucoseMapperTests
     public void TrendArrow_MapsToDirection(int arrow, GlucoseDirection expected)
     {
         var reading = _sut.ConvertMeasurement(
-            Measurement("3/14/2026 3:30:00 PM", trendArrow: arrow), PatientId);
+            Measurement(UsFormat, trendArrow: arrow), PatientId);
 
         reading!.Direction.Should().Be(expected);
+    }
+
+    /// <summary>
+    /// The shape a month/day misread leaves: a reading from the twelve-hour graph window landing
+    /// months away. Storing it would put glucose in a month the sensor was not worn.
+    /// </summary>
+    [Fact]
+    public void AReadingOutsideTheGraphWindow_YieldsNoReading()
+    {
+        var farPast = Recent.AddMonths(-8)
+            .ToString("M/d/yyyy h:mm:ss tt", CultureInfo.InvariantCulture);
+
+        _sut.ConvertMeasurement(Measurement(farPast), PatientId).Should().BeNull();
     }
 
     [Fact]

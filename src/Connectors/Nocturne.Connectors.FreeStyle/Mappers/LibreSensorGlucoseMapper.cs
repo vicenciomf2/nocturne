@@ -29,9 +29,22 @@ public class LibreSensorGlucoseMapper(ILogger? logger = null)
         try
         {
             var timestamp = LibreTimestampParser.Parse(measurement.FactoryTimestamp);
+            var now = DateTime.UtcNow;
+
+            // The vendor's date format is month/day ambiguous and nothing in the payload resolves
+            // it, so a day-first account is read month-first and lands months from the twelve-hour
+            // window this connector fetched. Drop it rather than store a reading in the wrong month.
+            if (!LibreTimestampParser.IsPlausible(timestamp, now))
+            {
+                logger?.LogWarning(
+                    "Discarding LibreLinkUp reading timestamped {Timestamp} from {Raw}: outside the "
+                    + "window the graph endpoint can return",
+                    timestamp, measurement.FactoryTimestamp);
+                return null;
+            }
+
             var direction = TrendArrowMap.GetValueOrDefault(measurement.TrendArrow, GlucoseDirection.NotComputable);
             var mgdl = (double)measurement.ValueInMgPerDl;
-            var now = DateTime.UtcNow;
 
             return new SensorGlucose
             {
